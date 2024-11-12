@@ -1,0 +1,307 @@
+import pandas as pd import scipy import numpy as np
+import seaborn as sns import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler from
+sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel from
+surprise import Dataset, Reader, SVD from
+surprise.model_selection import train_test_split from
+surprise.accuracy import rmse, mae from collections
+import defaultdict from sklearn.metrics import
+confusion_matrix
+kdrama_data=pd.read_csv(r&#39;C:\archive\kdrama.csv&#39;)
+print(kdrama_data.head()) print(kdrama_data.tail())
+print(kdrama_data.info()) print(kdrama_data.describe())
+print(kdrama_data.isnull().sum())
+kdrama_data=kdrama_data.dropna()
+print(kdrama_data[‘Number of Episodes’].unique())
+grouped_data=kdrama_data.groupby(‘Original Network’)
+aggregated_data=grouped_data.agg({‘Number of Episodes’:’mean’})
+                        #CREATING USER PROFILES
+user_profiles =
+kdrama_data.groupby(‘user_id’).agg({‘interaction_column’:’mean’})
+user_interaction = data.groupby(‘Genre’).agg({‘Rating’:’mean’})
+print(user_interaction)
+
+#TEMPORAL ANALYSIS
+kdrama_data[&#39;Year of release&#39;] = pd.to_datetime(kdrama_data[&#39;Year of
+release&#39;]) kdrama_data[&#39;year&#39;] = kdrama_data[&#39;Year of release&#39;].dt.year
+kdrama_data[&#39;month&#39;] = kdrama_data[&#39;Year of release&#39;].dt.month
+
+kdrama_data[&#39;day&#39;] = kdrama_data[&#39;Year of release&#39;].dt.day
+kdramas_per_year = kdrama_data[&#39;year&#39;].value_counts().sort_index()
+kdramas_per_month =
+kdrama_data.groupby(&#39;month&#39;)[&#39;Name&#39;].count()
+kdramas_per_day_of_week = kdrama_data[&#39;Year of
+release&#39;].dt.dayofweek.value_counts().sort_index() print(&quot;Number of
+KDramas released each year:\n&quot;, kdramas_per_year)
+print(&quot;\nNumber of KDramas released each month:\n&quot;,
+kdramas_per_month)
+print(&quot;\nNumber of KDramas released each day of the week (0 = Monday,
+6 = Sunday):\n&quot;, kdramas_per_day_of_week)
+
+#HISTOGRAM
+plt.hist(kdrama_data[‘Rating’], bins=20)
+plt.xlabel(‘Rating’)
+plt.ylabel(‘Frequency’)
+plt.title(‘Histogram of Rating’)
+plt.show()
+
+#BARCHART
+kdramas = [&#39;Crash Landing on You&#39;, &#39;Descendants of the Sun&#39;, &#39;Goblin&#39;,
+&#39;Itaewon Class&#39;, &#39;Start-Up&#39;] ratings = [9.0,
+8.5, 8.9, 9.2, 8.7] plt.figure(figsize=(10,
+6)) plt.bar(kdramas, ratings,
+color=&#39;skyblue&#39;) plt.title(&#39;Ratings of
+Popular KDramas&#39;) plt.xlabel(&#39;KDrama
+Titles&#39;) plt.ylabel(&#39;Ratings&#39;)
+plt.xticks(rotation=45, ha=&#39;right&#39;)
+plt.tight_layout() plt.show()
+
+#SCATTER PLOT
+plt.scatter(kdrama_data[‘Original
+Network’],kdrama_data[‘Rating’]) plt.xlabel(‘Original Network’)
+plt.ylabel(‘Rating’) plt.title(‘Scatter Plot of Original Network vs
+Rating’) plt.show()
+
+#BOX PLOT
+ratings = { &#39;Crash Landing on You&#39;: [9.0, 9.1, 8.9, 8.8, 9.2], &#39;Descendants of
+the Sun&#39;: [8.5, 8.7, 8.6, 8.8, 8.9], &#39;Goblin&#39;: [8.9, 8.8, 8.7, 9.0, 9.1], &#39;Itaewon
+Class&#39;: [9.2, 9.1, 9.3, 9.0, 9.2], &#39;Start-Up&#39;: [8.7, 8.8, 8.9, 8.6, 8.5] }
+kdrama_data = list(ratings.values())
+plt.figure(figsize=(10, 6))
+plt.boxplot(kdrama_data, labels=ratings.keys())
+plt.title(&#39;Ratings of Popular KDramas&#39;)
+plt.xlabel(&#39;KDrama Titles&#39;) plt.ylabel(&#39;Ratings&#39;)
+plt.xticks(rotation=45, ha=&#39;right&#39;)
+plt.tight_layout() plt.show()
+
+#PAIR PLOT
+sns.pairplot(kdrama_data)
+plt.title(‘Pair Plot of Numerical Variables’)
+plt.show()
+
+#INTERACTIVE SCATTER PLOT USING PLOTLY
+import plotly.express as px
+fig=px.scatter(kdrama_data,x=’Genre’,y=’Rating’,
+hover_data=‘Name’,title=’Interactive Scatter Plot: Genre vs Rating’)
+fig.update_layout(xaxis_title=’Genre’,yaxis_title=’Rating’)
+fig.show()
+
+# COLLABORATIVE FILTERING PART
+reader = Reader(rating_scale=(1, 10))
+data_cf = Dataset.load_from_df(kdrama_data[[&#39;Name&#39;, &#39;Number of
+Episodes&#39;, &#39;Rating&#39;]], reader) trainset_cf, testset_cf =
+train_test_split(data_cf, test_size=0.2)
+
+# USE SINGULAR VALUE DECOMPOSITION (SVD) FOR COLLABORATIVE
+FILTERING svd =
+SVD()
+svd.fit(trainset_cf)
+
+# EVALUATE THE COLLABORATIVE FILTERING MODEL
+predictions_cf = svd.test(testset_cf) rmse_score_cf =
+rmse(predictions_cf) print(&quot;Collaborative Filtering
+RMSE:&quot;, rmse_score_cf)
+def precision_recall_at_k(predictions_cf, k=10, threshold=4.0):
+user_est_true = defaultdict(list)
+for uid, _, true_r, est, _ in predictions_cf:
+user_est_true[uid].append((est, true_r))
+
+precisions = dict()
+recalls = dict()
+
+for uid, user_ratings in user_est_true.items():
+
+user_ratings.sort(key=lambda x: x[0], reverse=True)
+n_rel = sum((true_r &gt;= threshold) for (_, true_r) in
+user_ratings)
+n_rec_k = sum((est &gt;= threshold) for (est, _) in
+user_ratings[:k])
+n_rel_and_rec_k = sum(((true_r &gt;= threshold) and (est &gt;=
+threshold))
+
+for (est, true_r) in user_ratings[:k])
+
+precisions[uid] = n_rel_and_rec_k / n_rec_k if n_rec_k != 0 else 1
+recalls[uid] = n_rel_and_rec_k / n_rel if n_rel != 0 else 1
+avg_precision = sum(precisions.values()) / len(precisions)
+avg_recall = sum(recalls.values()) / len(recalls)
+return avg_precision, avg_recall
+precision, recall = precision_recall_at_k(predictions_cf, k=10,
+threshold=4.0)
+f1_score = 2 * (precision * recall) / (precision + recall) if (precision
++ recall) != 0 else 0 print(f&quot;Precision: {precision}&quot;)
+print(f&quot;Recall: {recall}&quot;) print(f&quot;F1-score: {f1_score}&quot;)
+from sklearn.metrics import average_precision_score
+def mean_average_precision(predictions,
+threshold=4.0):
+user_est_true = defaultdict(list)
+for uid, _, true_r, est, _ in predictions:
+user_est_true[uid].append((est, true_r))
+ap_scores = [] for uid, user_ratings in
+user_est_true.items():
+user_ratings.sort(key=lambda x: x[0], reverse=True)
+y_true = [(true_r &gt;= threshold) for (_, true_r) in user_ratings]
+y_scores = [est for (est, _) in user_ratings] ap =
+average_precision_score(y_true, y_scores)
+ap_scores.append(ap) map_score = sum(ap_scores) /
+len(ap_scores) return map_score def calculate_relevance(rating,
+threshold): return 1 if rating &gt;= threshold else 0
+
+# CALCULATE MRR
+def mean_reciprocal_rank(predictions, threshold=4.0):
+
+reciprocal_ranks = [] for uid, _,
+true_r, est, _ in predictions:
+relevance = calculate_relevance(true_r, threshold)
+if relevance == 1:
+reciprocal_ranks.append(1 / (est + 1))
+if reciprocal_ranks:
+return sum(reciprocal_ranks) / len(reciprocal_ranks)
+else:
+return 0
+mrr_score = mean_reciprocal_rank(predictions_cf) print(&quot;Mean
+Reciprocal Rank (MRR):&quot;, mrr_score)
+
+# Evaluate CF model map_cf =
+mean_average_precision(predictions_cf)
+print(f&quot;Mean Average Precision (CF): {map_cf}&quot;)
+
+# CALCULATE NDCG
+from math import log2 def
+normalized_dcg(predictions, k=10, threshold=4.0):
+ndcgs = [] for uid, _, true_r, est, _ in
+predictions:
+relevance_scores = [calculate_relevance(true_r, threshold)]
+predicted_scores = [est] ideal_relevance_scores =
+sorted(relevance_scores, reverse=True)
+dcg = sum((2 ** rel - 1) / (log2(i + 2)) for i, rel in
+enumerate(relevance_scores))
+idcg = sum((2 ** rel - 1) / (log2(i + 2)) for i, rel in
+enumerate(ideal_relevance_scores))
+if idcg == 0:
+
+ndcgs.append(0)
+else:
+ndcgs.append(dcg / idcg)
+if ndcgs:
+return sum(ndcgs) / len(ndcgs)
+else:
+return 0
+
+ndcg_score = normalized_dcg(predictions_cf) print(&quot;Normalized
+Discounted Cumulative Gain (NDCG):&quot;, ndcg_score)
+
+# CALCULATE ITEM COVERAGE
+def item_coverage(predictions):
+unique_items = set()
+for uid, _, _, _, _ in predictions:
+unique_items.add(uid)
+coverage = len(unique_items) / len(kdrama_data) # Assuming
+kdrama_data contains the entire catalog return coverage
+
+# CALCULATE CATALOG COVERAGE
+def catalog_coverage(predictions):
+recommended_items = set()
+for uid, _, _, _, _ in predictions:
+recommended_items.add(uid)
+catalog_coverage = len(recommended_items) / len(kdrama_data) #
+Assuming kdrama_data contains the entire catalog return catalog_coverage
+
+# CALCULATE NOVELTY
+def novelty(predictions):
+
+# Compute the average popularity (e.g., based on ratings) of recommended
+items
+# Higher average popularity indicates lower
+novelty total_popularity = 0 num_users =
+len(predictions)
+for _, _, true_r, _, _ in predictions:
+total_popularity += true_r average_popularity
+= total_popularity / num_users
+novelty_score = 1 - (average_popularity / 10) # Assuming ratings are on a scale
+of 1-10 return novelty_score
+
+# CALCULATE INTRA-LIST DIVERSITY
+def intra_list_diversity(predictions):
+diversity_scores = [] for
+uid, _, _, _, _ in predictions:
+recommended_items = [iid for iid, _, _, _, _ in predictions if iid != uid]
+num_unique_items = len(set(recommended_items))
+total_items = len(recommended_items)
+diversity_scores.append(1 - (num_unique_items / total_items))
+avg_diversity = sum(diversity_scores) / len(diversity_scores)
+return avg_diversity
+
+# Diversity Metrics item_cov =
+item_coverage(predictions_cf) catalog_cov =
+catalog_coverage(predictions_cf)
+novelty_score = novelty(predictions_cf)
+diversity = intra_list_diversity(predictions_cf)
+print(f&quot;Item Coverage: {item_cov}&quot;)
+print(f&quot;Catalog Coverage: {catalog_cov}&quot;)
+
+print(f&quot;Novelty: {novelty_score}&quot;)
+print(f&quot;Intra-List Diversity: {diversity}&quot;)
+
+# CALCULATE MAE
+predictions_cf = svd.test(testset_cf) mae_score_cf =
+mae(predictions_cf) print(&quot;Collaborative Filtering
+MAE:&quot;, mae_score_cf)
+
+# EVALUATE CB MODEL
+ground_truth_ratings = [5, 8, 7, 9, 6] cb_predictions
+= []
+
+# CONTENT-BASED FILTERING PART
+# COMBINE TITLE AND GENRE INTO A SINGLE FEATURE
+kdrama_data[&#39;features&#39;] = kdrama_data[&#39;Name&#39;] + &#39; &#39; + kdrama_data[&#39;Genre&#39;]
+
+# USE TF-IDF TO VECTORIZE KDRAMA FEATURES
+tfidf_vectorizer = TfidfVectorizer(stop_words=&#39;english&#39;) tfidf_matrix
+= tfidf_vectorizer.fit_transform(kdrama_data[&#39;features&#39;])
+
+# COMPUTE SIMILARITY MATRIX USING COSINE SIMILARITY
+cosine_sim = linear_kernel(tfidf_matrix, tfidf_matrix)
+
+# FUNCTION TO RECOMMEND TOP N KDRAMAS BASED ON TITLE, GENRE, AND
+RATING def recommend_kdramas(title, genre, rating,
+num_recommendations=5):
+idx = kdrama_data.index[kdrama_data[&#39;Name&#39;] == title].tolist()[0]
+sim_scores = list(enumerate(cosine_sim[idx]))
+
+# SORT KDRAMAS BASED ON THE SIMILARITY SCORES
+sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+
+# GET THE TOP N MOST SIMILAR KDRAMAS
+top_indices = [i[0] for i in sim_scores[:num_recommendations]]
+top_kdramas = kdrama_data.iloc[top_indices][kdrama_data[&#39;Rating&#39;]
+&gt;= rating] return top_kdramas[[&#39;Name&#39;, &#39;Genre&#39;, &#39;Rating&#39;]]
+recommendations_cb = recommend_kdramas(&#39;Descendants of the Sun&#39;, &#39;Action,
+Romance&#39;, 8.0, num_recommendations=5)
+print(&quot;Top 5 recommended kdramas based on content-based filtering:\n&quot;,
+recommendations_cb)
+
+# HEAT MAP OF THE SIMILARITY MATRIX
+plt.figure(figsize=(10, 8))
+sns.heatmap(cosine_sim, cmap=&#39;viridis&#39;)
+plt.title(&quot;Heat Map of KDrama Similarity
+Matrix&quot;) plt.xlabel(&quot;KDrama Index&quot;)
+plt.ylabel(&quot;KDrama Index&quot;) plt.show()
+
+# GET THE TRUE RATINGS AND PREDICTED RATINGS
+y_true = [pred.r_ui for pred in predictions_cf] y_pred
+= [round(pred.est) for pred in predictions_cf] y_true
+= [1 if rating &gt;= 4.0 else 0 for rating in y_true]
+y_pred = [round(pred) for pred in y_pred]
+# COMPUTE THE CONFUSION MATRIX
+conf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(1, 11))
+conf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(1, 11))
+# PLOT CONFUSION MATRIX
+plt.figure(figsize=(10, 8))
+
+sns.heatmap(conf_matrix, annot=True, fmt=&#39;d&#39;, cmap=&#39;Blues&#39;,
+xticklabels=np.arange(1, 11), yticklabels=np.arange(1, 11))
+plt.title(&quot;Confusion Matrix of Rating Predictions&quot;)
+plt.xlabel(&quot;Predicted Rating&quot;) plt.ylabel(&quot;True Rating&quot;)
+plt.show() 
